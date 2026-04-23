@@ -15,7 +15,6 @@ import {
   type HistoryListRecord
 } from "@/lib/history-records";
 import { useOptionalDebateWorkspaceState } from "@/lib/debate-workspace-state";
-import { getEvidenceHolder, type EvidenceHolder } from "@/lib/evidence-ownership";
 import { getWorkspaceCopy } from "@/lib/workspace-copy";
 
 type HistoryLoadResult = Awaited<ReturnType<typeof loadHistoryRecords>>;
@@ -35,41 +34,17 @@ function getHistoryStatusLabel(record: HistoryListRecord, copy: HistoryCopy) {
   }[record.status];
 }
 
-function getDebateModeLabel(record: HistoryListRecord, copy: HistoryCopy) {
-  return record.debateMode === "private-evidence"
-    ? copy.privateEvidenceMode
-    : copy.sharedEvidenceMode;
-}
-
-function formatAnalysisIssues(issues: string[], copy: HistoryCopy) {
-  return issues.length ? issues.join("；") : copy.noAnalysisIssues;
-}
-
-function getEvidenceHolderLabel(holder: EvidenceHolder, copy: HistoryCopy) {
-  return holder ? copy.evidenceHolderLabels[holder] : null;
-}
-
 function DialogShell({
   title,
   children,
-  onClose,
-  closeOnBackdrop = false
+  onClose
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
-  closeOnBackdrop?: boolean;
 }) {
   return (
-    <div
-      data-testid="history-dialog-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/38 px-4 py-6"
-      onMouseDown={(event) => {
-        if (closeOnBackdrop && event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/38 px-4 py-6">
       <div
         role="dialog"
         aria-modal="true"
@@ -104,16 +79,11 @@ function HistoryRecordDetailsDialog({
   copy: HistoryCopy;
   onClose: () => void;
 }) {
-  const privateEvidenceItems = Object.values(record.privateEvidence).flat();
-  const evidenceTitleById = new Map(
-    [...record.evidence, ...privateEvidenceItems].map((item) => [item.id, item.title])
-  );
+  const evidenceTitleById = new Map(record.evidence.map((item) => [item.id, item.title]));
   const evidenceOrderById = new Map(record.evidence.map((item, index) => [item.id, index + 1]));
-  const [expandedEvidenceId, setExpandedEvidenceId] = useState<string | null>(null);
-  const [expandedTurnId, setExpandedTurnId] = useState<string | null>(null);
 
   return (
-    <DialogShell title={copy.detailDialogTitle} onClose={onClose} closeOnBackdrop>
+    <DialogShell title={copy.detailDialogTitle} onClose={onClose}>
       <div className="space-y-6 pt-5 text-sm leading-6 text-app-muted">
         <section className="space-y-2">
           <p className="text-base font-semibold text-app-strong">{record.question}</p>
@@ -122,7 +92,6 @@ function HistoryRecordDetailsDialog({
             <p>{copy.statusPrefix}：{getHistoryStatusLabel(record, copy)}</p>
             <p>{copy.modelPrefix}：{record.model}</p>
             <p>{copy.searchEnginePrefix}：{record.searchEngine}</p>
-            <p>{copy.debateModePrefix}：{getDebateModeLabel(record, copy)}</p>
             <p>{copy.rolePrefix}：{record.roleSummary}</p>
             <p>{copy.evidencePrefix}：{record.evidenceCount}</p>
             <p>{copy.turnPrefix}：{record.turnCount}</p>
@@ -133,64 +102,36 @@ function HistoryRecordDetailsDialog({
           <h3 className="text-base font-semibold text-app-strong">{copy.evidenceSectionTitle}</h3>
           {record.evidence.length ? (
             <ol className="space-y-3">
-              {record.evidence.map((item, index) => {
-                const holderLabel = getEvidenceHolderLabel(
-                  getEvidenceHolder(item, record.privateEvidence),
-                  copy
-                );
-                const isExpanded = expandedEvidenceId === item.id;
-
-                return (
-                  <li key={item.id} className="rounded-[8px] border border-black/8 bg-black/[0.02]">
-                    <button
-                      type="button"
-                      aria-expanded={isExpanded}
-                      className="w-full rounded-[8px] p-4 text-left"
-                      onClick={() =>
-                        setExpandedEvidenceId((current) => (current === item.id ? null : item.id))
-                      }
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs uppercase tracking-[0.16em] text-app-muted">
-                          {copy.evidencePrefix} {index + 1}
-                        </span>
-                        {holderLabel ? (
-                          <span className="rounded-full bg-black px-2.5 py-1 text-xs font-medium text-white">
-                            {holderLabel}
-                          </span>
-                        ) : null}
-                      </div>
-                      <h4 className="mt-2 text-sm font-semibold text-app-strong">{item.title}</h4>
-                      <p className="mt-1">{item.sourceName} · {item.sourceType}</p>
-                    </button>
-                    {isExpanded ? (
-                      <div className="border-t border-black/8 px-4 pb-4 pt-4">
-                        <a
-                          className="block break-all text-app-strong underline decoration-black/20 underline-offset-4"
-                          href={item.url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {item.url}
-                        </a>
-                        <p className="mt-3 text-app-foreground">{item.summary}</p>
-                        {item.dataPoints?.length ? (
-                          <div className="mt-3">
-                            <p className="text-xs uppercase tracking-[0.16em] text-app-muted">
-                              {copy.dataPointsTitle}
-                            </p>
-                            <ul className="mt-2 list-disc space-y-1 pl-5">
-                              {item.dataPoints.map((point) => (
-                                <li key={point}>{point}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
+              {record.evidence.map((item, index) => (
+                <li key={item.id} className="rounded-[8px] border border-black/8 bg-black/[0.02] p-4">
+                  <div className="text-xs uppercase tracking-[0.16em] text-app-muted">
+                    {copy.evidencePrefix} {index + 1}
+                  </div>
+                  <h4 className="mt-2 text-sm font-semibold text-app-strong">{item.title}</h4>
+                  <p className="mt-1">{item.sourceName} · {item.sourceType}</p>
+                  <a
+                    className="mt-1 block break-all text-app-strong underline decoration-black/20 underline-offset-4"
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {item.url}
+                  </a>
+                  <p className="mt-3 text-app-foreground">{item.summary}</p>
+                  {item.dataPoints?.length ? (
+                    <div className="mt-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-app-muted">
+                        {copy.dataPointsTitle}
+                      </p>
+                      <ul className="mt-2 list-disc space-y-1 pl-5">
+                        {item.dataPoints.map((point) => (
+                          <li key={point}>{point}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </li>
+              ))}
             </ol>
           ) : (
             <p className="session-empty-state">{copy.noEvidence}</p>
@@ -201,70 +142,34 @@ function HistoryRecordDetailsDialog({
           <h3 className="text-base font-semibold text-app-strong">{copy.turnsSectionTitle}</h3>
           {record.turns.length ? (
             <ol className="space-y-3">
-              {record.turns.map((turn, index) => {
-                const isExpanded = expandedTurnId === turn.id;
-
-                return (
-                  <li key={turn.id} className="rounded-[8px] border border-black/8 bg-white">
-                    <button
-                      type="button"
-                      aria-expanded={isExpanded}
-                      className="w-full rounded-[8px] p-4 text-left"
-                      onClick={() =>
-                        setExpandedTurnId((current) => (current === turn.id ? null : turn.id))
-                      }
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-black px-2.5 py-1 text-xs text-white">
-                          {copy.turnPrefix} {index + 1}
-                        </span>
-                        <span className="rounded-full border border-black/10 px-2.5 py-1 text-xs text-app-strong">
-                          {turn.speaker}
-                        </span>
-                      </div>
-                    </button>
-                    {isExpanded ? (
-                      <div className="border-t border-black/8 px-4 pb-4 pt-4">
-                        {turn.analysis ? (
-                          <div data-testid="history-turn-analysis" className="space-y-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-app-muted">
-                              {copy.analysisTitle}
-                            </p>
-                            <div className="space-y-1 text-app-foreground">
-                              <p>
-                                {copy.factualIssuesPrefix}：{formatAnalysisIssues(turn.analysis.factualIssues, copy)}
-                              </p>
-                              <p>
-                                {copy.logicalIssuesPrefix}：{formatAnalysisIssues(turn.analysis.logicalIssues, copy)}
-                              </p>
-                              <p>
-                                {copy.valueIssuesPrefix}：{formatAnalysisIssues(turn.analysis.valueIssues, copy)}
-                              </p>
-                              <p>{copy.searchFocusPrefix}：{turn.analysis.searchFocus}</p>
-                            </div>
-                          </div>
-                        ) : null}
-                        <p className="mt-3 text-app-foreground">{turn.content}</p>
-                        {turn.referencedEvidenceIds.length ? (
-                          <ul className="mt-3 flex flex-wrap gap-2">
-                            {turn.referencedEvidenceIds.map((evidenceId) => (
-                              <li
-                                key={`${turn.id}-${evidenceId}`}
-                                className="rounded-full bg-black/[0.04] px-2.5 py-1 text-xs text-app-muted"
-                              >
-                                {copy.evidencePrefix} {evidenceOrderById.get(evidenceId) ?? evidenceId}
-                                {evidenceTitleById.get(evidenceId)
-                                  ? ` · ${evidenceTitleById.get(evidenceId)}`
-                                  : ""}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
+              {record.turns.map((turn, index) => (
+                <li key={turn.id} className="rounded-[8px] border border-black/8 bg-white p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-black px-2.5 py-1 text-xs text-white">
+                      {copy.turnPrefix} {index + 1}
+                    </span>
+                    <span className="rounded-full border border-black/10 px-2.5 py-1 text-xs text-app-strong">
+                      {turn.speaker}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-app-foreground">{turn.content}</p>
+                  {turn.referencedEvidenceIds.length ? (
+                    <ul className="mt-3 flex flex-wrap gap-2">
+                      {turn.referencedEvidenceIds.map((evidenceId) => (
+                        <li
+                          key={`${turn.id}-${evidenceId}`}
+                          className="rounded-full bg-black/[0.04] px-2.5 py-1 text-xs text-app-muted"
+                        >
+                          {copy.evidencePrefix} {evidenceOrderById.get(evidenceId) ?? evidenceId}
+                          {evidenceTitleById.get(evidenceId)
+                            ? ` · ${evidenceTitleById.get(evidenceId)}`
+                            : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </li>
+              ))}
             </ol>
           ) : (
             <p className="session-empty-state">{copy.noTurns}</p>
@@ -448,8 +353,6 @@ export function HistoryPageContent({
             question={record.question}
             createdAt={record.createdAt}
             model={record.model}
-            searchEngine={record.searchEngine}
-            debateMode={getDebateModeLabel(record, historyCopy)}
             roleSummary={record.roleSummary}
             status={record.status}
             copy={historyCopy}
@@ -462,14 +365,13 @@ export function HistoryPageContent({
               debateWorkspaceState?.setQuestion(record.question);
               debateWorkspaceState?.setDraftPresetSelection(record.presetSelection);
               debateWorkspaceState?.setDraftFirstSpeaker(record.firstSpeaker);
-              debateWorkspaceState?.setDraftDebateMode(record.debateMode);
               debateWorkspaceState?.setSession(null);
               debateWorkspaceState?.setHistoryMeta(null);
               debateWorkspaceState?.setErrorKind(null);
               debateWorkspaceState?.setErrorDetail(null);
               debateWorkspaceState?.setIsStopping(false);
               debateWorkspaceState?.setHistorySaveStatus("idle");
-              router.push("/app");
+              router.push("/debate");
             }}
             onDelete={() => {
               setDetailRecordId(null);

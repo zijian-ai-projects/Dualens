@@ -32,7 +32,6 @@ export function serializeHistoryRecord(
 ) {
   return {
     id: session.id,
-    debateMode: session.debateMode,
     createdAt: meta.createdAt,
     updatedAt: new Date().toISOString(),
     question: meta.question,
@@ -43,7 +42,6 @@ export function serializeHistoryRecord(
     language: meta.language,
     stage: session.stage,
     evidence: session.evidence,
-    privateEvidence: session.privateEvidence ?? {},
     researchProgress: session.researchProgress,
     turns: session.turns,
     summary: session.summary,

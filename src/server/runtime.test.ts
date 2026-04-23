@@ -3,35 +3,13 @@ import { runtime } from "@/server/runtime";
 
 const SERVER_DEEPSEEK_API_KEY = "server-owned-deepseek-key";
 
-function createOpenAIResponse(schemaName = "DebateTurn") {
-  const content =
-    schemaName === "DebateTurnAnalysis"
-      ? {
-          factualIssues: [],
-          logicalIssues: [],
-          valueIssues: [],
-          searchFocus: "general follow-up"
-        }
-      : schemaName === "DebateSummary"
-        ? {
-            strongestFor: [],
-            strongestAgainst: [],
-            coreDisagreement: "Disagreement.",
-            keyUncertainty: "Uncertainty.",
-            nextAction: "Next."
-          }
-        : {
-            speaker: "Lumina",
-            content: "Argument",
-            referencedEvidenceIds: []
-          };
-
+function createOpenAIResponse() {
   return new Response(
     JSON.stringify({
       choices: [
         {
           message: {
-            content: JSON.stringify(content)
+            content: JSON.stringify({ any: "value" })
           }
         }
       ]
@@ -63,10 +41,7 @@ afterEach(() => {
 
 describe("runtime speaker titles", () => {
   it("respects firstSpeaker when creating opening and debate turns", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      const body = JSON.parse(String(init?.body ?? "{}"));
-      return createOpenAIResponse(body?.metadata?.schemaName);
-    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => createOpenAIResponse());
 
     const session = await runtime.createSession(createSessionInput({ firstSpeaker: "vigila" }));
 
@@ -76,17 +51,12 @@ describe("runtime speaker titles", () => {
     await runtime.continueSession(session.id);
     await runtime.continueSession(session.id);
 
-    const turnCalls = fetchMock.mock.calls.filter((call) => {
-      const body = JSON.parse(String(call[1]?.body ?? "{}"));
-      return body?.metadata?.schemaName === "DebateTurn";
-    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
 
-    expect(turnCalls).toHaveLength(4);
-
-    const firstBody = JSON.parse(String(turnCalls[0]?.[1]?.body));
-    const secondBody = JSON.parse(String(turnCalls[1]?.[1]?.body));
-    const thirdBody = JSON.parse(String(turnCalls[2]?.[1]?.body));
-    const fourthBody = JSON.parse(String(turnCalls[3]?.[1]?.body));
+    const firstBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+    const thirdBody = JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body));
+    const fourthBody = JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body));
 
     expect(firstBody.messages[0].content).toContain("Vigila");
     expect(secondBody.messages[0].content).toContain("Lumina");
@@ -97,10 +67,7 @@ describe("runtime speaker titles", () => {
   });
 
   it("assigns ids to generated turns before returning them to the client", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      const body = JSON.parse(String(init?.body ?? "{}"));
-      return createOpenAIResponse(body?.metadata?.schemaName);
-    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => createOpenAIResponse());
 
     const session = await runtime.createSession(createSessionInput({ firstSpeaker: "vigila" }));
     await runtime.continueSession(session.id);
@@ -118,11 +85,6 @@ describe("runtime speaker titles", () => {
   it("passes prior turns into later generation so agents can rebut with evidence", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       const body = JSON.parse(String(init?.body));
-      const schemaName = body?.metadata?.schemaName;
-      if (schemaName !== "DebateTurn") {
-        return createOpenAIResponse(schemaName);
-      }
-
       const prompt = String(body?.messages?.[0]?.content ?? "");
       const speaker = prompt.includes("Speaker: Lumina") ? "Lumina" : "Vigila";
 
@@ -153,128 +115,10 @@ describe("runtime speaker titles", () => {
     await runtime.continueSession(session.id);
     await runtime.continueSession(session.id);
 
-    const turnCalls = fetchMock.mock.calls.filter((call) => {
-      const body = JSON.parse(String(call[1]?.body ?? "{}"));
-      return body?.metadata?.schemaName === "DebateTurn";
-    });
-    const secondBody = JSON.parse(String(turnCalls[1]?.[1]?.body));
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
     expect(secondBody.messages[0].content).toContain("Debate context:");
     expect(secondBody.messages[0].content).toContain("Protect downside first.");
     expect(secondBody.messages[0].content).toContain("evidenceIds=e1");
-
-    fetchMock.mockRestore();
-  });
-
-  it("adds analysis before follow-up turns in shared-evidence mode", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      const body = JSON.parse(String(init?.body));
-      const schemaName = body?.metadata?.schemaName;
-
-      if (schemaName === "DebateTurnAnalysis") {
-        return new Response(
-          JSON.stringify({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    factualIssues: ["Rent claim needs data."],
-                    logicalIssues: [],
-                    valueIssues: [],
-                    searchFocus: "rent data"
-                  })
-                }
-              }
-            ]
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        );
-      }
-
-      return createOpenAIResponse(schemaName);
-    });
-
-    const session = await runtime.createSession(createSessionInput());
-
-    await runtime.continueSession(session.id);
-    await runtime.continueSession(session.id);
-    const debated = await runtime.continueSession(session.id);
-
-    expect(debated.turns[1]?.analysis?.factualIssues).toContain("Rent claim needs data.");
-
-    fetchMock.mockRestore();
-  });
-
-  it("runs private-evidence mode as three rounds with side-specific evidence pools", async () => {
-    const prompts: string[] = [];
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      const body = JSON.parse(String(init?.body));
-      const prompt = String(body?.messages?.[0]?.content ?? "");
-      const schemaName = body?.metadata?.schemaName;
-
-      prompts.push(prompt);
-
-      if (schemaName === "DebateTurnAnalysis") {
-        return new Response(
-          JSON.stringify({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    factualIssues: [],
-                    logicalIssues: ["Causality needs checking."],
-                    valueIssues: [],
-                    searchFocus: "private follow-up evidence"
-                  })
-                }
-              }
-            ]
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        );
-      }
-
-      if (schemaName === "DebateSummary") {
-        return createOpenAIResponse(schemaName);
-      }
-
-      return new Response(
-        JSON.stringify({
-          choices: [
-            {
-              message: {
-                content: JSON.stringify({
-                  speaker: prompt.includes("Speaker: Lumina") ? "Lumina" : "Vigila",
-                  content: "Private-mode argument.",
-                  referencedEvidenceIds: []
-                })
-              }
-            }
-          ]
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      );
-    });
-
-    let session = await runtime.createSession(
-      createSessionInput({
-        config: { debateMode: "private-evidence" }
-      })
-    );
-
-    while (session.stage !== "complete") {
-      session = await runtime.continueSession(session.id);
-    }
-
-    expect(session.debateMode).toBe("private-evidence");
-    expect(session.turns).toHaveLength(6);
-    expect(session.turns.map((turn) => turn.round)).toEqual([1, 1, 2, 2, 3, 3]);
-    expect(session.privateEvidence?.lumina?.length).toBeGreaterThan(0);
-    expect(session.privateEvidence?.vigila?.length).toBeGreaterThan(0);
-
-    const luminaPrompt = prompts.find(
-      (prompt) => prompt.includes("Speaker: Lumina") && prompt.includes("Evidence context:")
-    );
-    expect(luminaPrompt).not.toContain("Vigila private");
 
     fetchMock.mockRestore();
   });
@@ -282,10 +126,7 @@ describe("runtime speaker titles", () => {
 
 describe("runtime built-in model mapping", () => {
   it("maps a built-in model to fixed DeepSeek runtime config when creating a session", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      const body = JSON.parse(String(init?.body ?? "{}"));
-      return createOpenAIResponse(body?.metadata?.schemaName);
-    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => createOpenAIResponse());
 
     const session = await runtime.createSession(createSessionInput({ model: "deepseek-reasoner" }));
 
@@ -303,10 +144,7 @@ describe("runtime built-in model mapping", () => {
     vi.stubEnv("OPENAI_API_KEY", "fallback-openai-key");
     vi.stubEnv("OPENAI_BASE_URL", "https://gateway.example/v1");
 
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      const body = JSON.parse(String(init?.body ?? "{}"));
-      return createOpenAIResponse(body?.metadata?.schemaName);
-    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => createOpenAIResponse());
 
     const session = await runtime.createSession(createSessionInput());
 
@@ -322,9 +160,8 @@ describe("runtime built-in model mapping", () => {
       baseUrl: "https://gateway.example/v1",
       model: "deepseek-chat"
     });
-    expect(providerCalls).toHaveLength(3);
+    expect(providerCalls).toHaveLength(2);
     expect(providerCalls.map((call) => String(call[0]))).toEqual([
-      "https://gateway.example/v1/chat/completions",
       "https://gateway.example/v1/chat/completions",
       "https://gateway.example/v1/chat/completions"
     ]);
@@ -337,16 +174,13 @@ describe("runtime built-in model mapping", () => {
     vi.stubEnv("OPENAI_API_KEY", undefined);
     vi.stubEnv("api_key", undefined);
 
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      const body = JSON.parse(String(init?.body ?? "{}"));
-      return createOpenAIResponse(body?.metadata?.schemaName);
-    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => createOpenAIResponse());
 
     const session = await runtime.createSession(
       createSessionInput({
         model: "gpt-4.1",
         providerConfig: {
-          baseUrl: "https://gateway.example/v1",
+          baseUrl: "https://api.openai.com/v1",
           apiKey: "client-openai-key",
           model: "gpt-4.1"
         }
@@ -362,14 +196,13 @@ describe("runtime built-in model mapping", () => {
     );
 
     expect(session.config.provider).toMatchObject({
-      baseUrl: "https://gateway.example/v1",
+      baseUrl: "https://api.openai.com/v1",
       model: "gpt-4.1"
     });
     expect(session.config.provider).not.toHaveProperty("apiKey");
     expect(providerCalls.map((call) => String(call[0]))).toEqual([
-      "https://gateway.example/v1/chat/completions",
-      "https://gateway.example/v1/chat/completions",
-      "https://gateway.example/v1/chat/completions"
+      "https://api.openai.com/v1/chat/completions",
+      "https://api.openai.com/v1/chat/completions"
     ]);
     expect(providerCalls[0]?.[1]?.headers).toMatchObject({
       Authorization: "Bearer client-openai-key"
@@ -385,10 +218,7 @@ describe("runtime built-in model mapping", () => {
     vi.stubEnv("api_key", "lowercase-key");
     vi.stubEnv("base_url", "https://lowercase.example/v1");
 
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      const body = JSON.parse(String(init?.body ?? "{}"));
-      return createOpenAIResponse(body?.metadata?.schemaName);
-    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => createOpenAIResponse());
 
     const session = await runtime.createSession(createSessionInput());
 
@@ -405,7 +235,6 @@ describe("runtime built-in model mapping", () => {
       model: "deepseek-chat"
     });
     expect(providerCalls.map((call) => String(call[0]))).toEqual([
-      "https://lowercase.example/v1/chat/completions",
       "https://lowercase.example/v1/chat/completions",
       "https://lowercase.example/v1/chat/completions"
     ]);
@@ -424,7 +253,7 @@ describe("runtime built-in model mapping", () => {
   it("uses Tavily search when TAVILY_API_KEY is configured", async () => {
     vi.stubEnv("TAVILY_API_KEY", "tavily-key");
 
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
 
       if (url === "https://api.tavily.com/search") {
@@ -483,7 +312,7 @@ describe("runtime built-in model mapping", () => {
   it("uses a client-provided Tavily search config instead of DuckDuckGo search", async () => {
     vi.stubEnv("TAVILY_API_KEY", undefined);
 
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
 
       if (url === "https://api.tavily.com/search") {
@@ -508,8 +337,7 @@ describe("runtime built-in model mapping", () => {
         );
       }
 
-      const body = JSON.parse(String(init?.body ?? "{}"));
-      return createOpenAIResponse(body?.metadata?.schemaName);
+      return createOpenAIResponse();
     });
 
     const session = await runtime.createSession(
@@ -538,10 +366,7 @@ describe("runtime built-in model mapping", () => {
 
 describe("runtime session cloning", () => {
   it("returns cloned sessions so caller mutation does not leak back into storage", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      const body = JSON.parse(String(init?.body ?? "{}"));
-      return createOpenAIResponse(body?.metadata?.schemaName);
-    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => createOpenAIResponse());
 
     const session = await runtime.createSession(createSessionInput());
 
@@ -555,9 +380,8 @@ describe("runtime session cloning", () => {
       String(call[0]).includes("/chat/completions")
     );
 
-    expect(providerCalls).toHaveLength(3);
+    expect(providerCalls).toHaveLength(2);
     expect(providerCalls.map((call) => String(call[0]))).toEqual([
-      "https://api.deepseek.com/chat/completions",
       "https://api.deepseek.com/chat/completions",
       "https://api.deepseek.com/chat/completions"
     ]);
@@ -569,15 +393,14 @@ describe("runtime diagnostics", () => {
   it("persists structured diagnostics for research failures", async () => {
     vi.stubEnv("TAVILY_API_KEY", "tavily-key");
 
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
 
       if (url === "https://api.tavily.com/search") {
         throw new TypeError("fetch failed");
       }
 
-      const body = JSON.parse(String(init?.body ?? "{}"));
-      return createOpenAIResponse(body?.metadata?.schemaName);
+      return createOpenAIResponse();
     });
 
     const session = await runtime.createSession(createSessionInput());
@@ -641,10 +464,6 @@ describe("runtime diagnostics", () => {
         });
       }
 
-      if (schemaName === "DebateTurnAnalysis") {
-        return createOpenAIResponse(schemaName);
-      }
-
       return new Response(
         JSON.stringify({
           choices: [
@@ -696,57 +515,6 @@ describe("runtime diagnostics", () => {
     fetchMock.mockRestore();
   });
 
-  it("classifies private-mode turn failures as debate failures before six turns", async () => {
-    let debateTurnCount = 0;
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
-      const body = JSON.parse(String(init?.body ?? "{}"));
-      const schemaName = body?.metadata?.schemaName;
-
-      if (schemaName === "DebateTurnAnalysis") {
-        return createOpenAIResponse(schemaName);
-      }
-
-      if (schemaName === "DebateTurn") {
-        debateTurnCount += 1;
-
-        if (debateTurnCount === 3) {
-          return new Response("{}", {
-            status: 401,
-            headers: { "Content-Type": "application/json" }
-          });
-        }
-      }
-
-      return createOpenAIResponse(schemaName);
-    });
-
-    const session = await runtime.createSession(
-      createSessionInput({
-        config: {
-          debateMode: "private-evidence",
-          roundCount: 1
-        }
-      })
-    );
-
-    await runtime.continueSession(session.id);
-    await runtime.continueSession(session.id);
-    await runtime.continueSession(session.id);
-
-    await expect(runtime.continueSession(session.id)).rejects.toThrow(
-      "OpenAI-compatible request failed with status 401"
-    );
-
-    const stopped = await runtime.stopSession(session.id);
-
-    expect(stopped.diagnosis).toMatchObject({
-      stage: "debate",
-      failingStep: "run-debate-round"
-    });
-
-    fetchMock.mockRestore();
-  });
-
   it("keeps the debate moving when additional Tavily research fails mid-round", async () => {
     vi.stubEnv("TAVILY_API_KEY", "tavily-key");
 
@@ -771,11 +539,6 @@ describe("runtime diagnostics", () => {
       }
 
       const body = JSON.parse(String(init?.body));
-      const schemaName = body?.metadata?.schemaName;
-      if (schemaName === "DebateTurnAnalysis") {
-        return createOpenAIResponse(schemaName);
-      }
-
       const prompt = String(body?.messages?.[0]?.content ?? "");
       const speaker = prompt.includes("Speaker: Lumina") ? "Lumina" : "Vigila";
 
@@ -833,11 +596,6 @@ describe("runtime diagnostics", () => {
       }
 
       const body = JSON.parse(String(init?.body));
-      const schemaName = body?.metadata?.schemaName;
-      if (schemaName === "DebateTurnAnalysis") {
-        return createOpenAIResponse(schemaName);
-      }
-
       const prompt = String(body?.messages?.[0]?.content ?? "");
       const speaker = prompt.includes("Speaker: Lumina") ? "Lumina" : "Vigila";
 
@@ -869,10 +627,10 @@ describe("runtime diagnostics", () => {
     await runtime.continueSession(session.id);
     await runtime.continueSession(session.id);
 
-    expect(tavilyQueries).toHaveLength(3);
-    expect(tavilyQueries[2]).toContain("Latest claim to verify:");
-    expect(tavilyQueries[2]).toContain("Salary upside can offset the move if the data supports it.");
-    expect(tavilyQueries[2]).toContain("support or challenge");
+    expect(tavilyQueries).toHaveLength(2);
+    expect(tavilyQueries[1]).toContain("Latest claim to verify:");
+    expect(tavilyQueries[1]).toContain("Salary upside can offset the move if the data supports it.");
+    expect(tavilyQueries[1]).toContain("support or challenge");
 
     fetchMock.mockRestore();
   });

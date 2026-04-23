@@ -99,7 +99,6 @@ export function getLocalizedTemperamentPairLabel(
 }
 
 export const DEFAULT_SESSION_CONFIG: SessionConfigDefaults = {
-  debateMode: "shared-evidence",
   sourceStrategy: "credible-first",
   searchDepth: "standard",
   roundCount: 3,

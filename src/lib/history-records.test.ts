@@ -194,8 +194,6 @@ describe("history record loading", () => {
     expect(result.records).toHaveLength(1);
     expect(result.records[0]).toMatchObject({
       id: "session-legacy",
-      debateMode: "shared-evidence",
-      privateEvidence: {},
       evidence: [],
       turns: [],
       evidenceCount: 0,

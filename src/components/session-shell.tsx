@@ -28,11 +28,7 @@ import {
 import type {
   AppLanguage,
   DebatePresetSelection,
-  DebateMode,
-  DebateTurnAnalysis,
-  Evidence,
   OpenAICompatibleProviderConfig,
-  PrivateEvidencePools,
   SearchEngineRuntimeConfig,
   SessionDiagnosis,
   ResearchPreviewItem,
@@ -41,6 +37,7 @@ import type {
   UiLanguage
 } from "@/lib/types";
 
+type UiCopy = ReturnType<typeof getUiCopy>;
 const SESSION_DIAGNOSIS_STAGES = new Set<SessionDiagnosis["stage"]>(["research", "opening", "debate", "complete"]);
 const DIAGNOSTIC_CATEGORIES = new Set<SessionDiagnosis["category"]>([
   "auth",
@@ -63,7 +60,6 @@ const SESSION_POLL_INTERVAL_MS = process.env.NODE_ENV === "test" ? 0 : 1000;
 
 export type SessionInput = {
   question: string;
-  debateMode: DebateMode;
   presetSelection: DebatePresetSelection;
   firstSpeaker: "lumina" | "vigila";
   language: AppLanguage;
@@ -74,15 +70,7 @@ export type SessionInput = {
 
 export type SessionView = Pick<
   SessionRecord,
-  | "id"
-  | "debateMode"
-  | "stage"
-  | "evidence"
-  | "privateEvidence"
-  | "turns"
-  | "summary"
-  | "researchProgress"
-  | "diagnosis"
+  "id" | "stage" | "evidence" | "turns" | "summary" | "researchProgress" | "diagnosis"
 >;
 
 async function createDemoSession(input: SessionInput): Promise<SessionView> {
@@ -154,52 +142,13 @@ function isEvidence(value: unknown): value is SessionView["evidence"][number] {
   );
 }
 
-function isSpeakerSideKey(value: unknown): value is SessionRecord["firstSpeaker"] {
-  return value === "lumina" || value === "vigila";
-}
-
-function isDebateMode(value: unknown): value is DebateMode {
-  return value === "shared-evidence" || value === "private-evidence";
-}
-
-function isDebateTurnAnalysis(value: unknown): value is DebateTurnAnalysis {
-  return (
-    isRecord(value) &&
-    isStringArray(value.factualIssues) &&
-    isStringArray(value.logicalIssues) &&
-    isStringArray(value.valueIssues) &&
-    typeof value.searchFocus === "string"
-  );
-}
-
-function isPrivateEvidencePools(value: unknown): value is PrivateEvidencePools {
-  if (value === undefined) {
-    return true;
-  }
-
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  return Object.entries(value).every(
-    ([side, evidence]) =>
-      isSpeakerSideKey(side) &&
-      Array.isArray(evidence) &&
-      evidence.every((item): item is Evidence => isEvidence(item))
-  );
-}
-
 function isDebateTurn(value: unknown): value is SessionView["turns"][number] {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.speaker === "string" &&
     typeof value.content === "string" &&
-    isStringArray(value.referencedEvidenceIds) &&
-    (value.side === undefined || isSpeakerSideKey(value.side)) &&
-    (value.round === undefined || typeof value.round === "number") &&
-    (value.analysis === undefined || isDebateTurnAnalysis(value.analysis)) &&
-    (value.privateEvidenceIds === undefined || isStringArray(value.privateEvidenceIds))
+    isStringArray(value.referencedEvidenceIds)
   );
 }
 
@@ -257,12 +206,10 @@ function isSessionViewResponse(value: unknown): value is SessionView {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
-    isDebateMode(value.debateMode) &&
     typeof value.stage === "string" &&
     SESSION_VIEW_STAGES.has(value.stage as SessionStage) &&
     Array.isArray(value.evidence) &&
     value.evidence.every(isEvidence) &&
-    isPrivateEvidencePools(value.privateEvidence) &&
     Array.isArray(value.turns) &&
     value.turns.every(isDebateTurn) &&
     (value.summary === undefined || isDebateSummary(value.summary)) &&
@@ -317,26 +264,50 @@ function formatSessionDiagnosisErrorDetail(diagnosis: SessionDiagnosis) {
   return [diagnosis.summary, diagnosis.suggestedFix].filter(Boolean).join(" ");
 }
 
-function getLatestTurnBySide(turns: SessionView["turns"], side: SessionRecord["firstSpeaker"]) {
-  for (let index = turns.length - 1; index >= 0; index -= 1) {
-    const turn = turns[index];
-
-    if (turn.side === side) {
-      return turn;
-    }
+function ResearchStatus({
+  progress,
+  copy
+}: {
+  progress?: SessionView["researchProgress"];
+  copy: UiCopy;
+}) {
+  if (!progress) {
+    return null;
   }
 
-  return null;
+  const sourceLabel =
+    progress.sourceCount === 1
+      ? copy.sourceCountOne
+      : copy.sourceCountMany.replace("{count}", String(progress.sourceCount));
+  const evidenceLabel =
+    progress.evidenceCount === 1
+      ? copy.evidenceCountOne
+      : copy.evidenceCountMany.replace("{count}", String(progress.evidenceCount));
+  const stageLabel = copy.researchProgressStageLabels[progress.stage];
+
+  return (
+    <section aria-label={copy.researchProgressTitle} aria-live="polite" className="research-status">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/50">{copy.researchProgressTitle}</p>
+          <h2 className="mt-2 text-lg font-semibold text-ink">{stageLabel}</h2>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl bg-white/80 p-3">
+          <p className="text-xs uppercase tracking-[0.16em] text-ink/50">{copy.sourceLabel}</p>
+          <p className="mt-1 text-sm font-medium text-ink">{sourceLabel}</p>
+        </div>
+        <div className="rounded-2xl bg-white/80 p-3">
+          <p className="text-xs uppercase tracking-[0.16em] text-ink/50">{copy.evidenceLabel}</p>
+          <p className="mt-1 text-sm font-medium text-ink">{evidenceLabel}</p>
+        </div>
+      </div>
+    </section>
+  );
 }
 
-function SideIdentitySummary({
-  language,
-  turns
-}: {
-  language: UiLanguage;
-  turns: SessionView["turns"];
-}) {
-  const copy = getUiCopy(language);
+function SideIdentitySummary({ language }: { language: UiLanguage }) {
   const lumina = getLocalizedSideIdentityCopy("lumina", language);
   const vigila = getLocalizedSideIdentityCopy("vigila", language);
 
@@ -345,13 +316,7 @@ function SideIdentitySummary({
       aria-label={language === "en" ? "Debate sides" : "辩论双方"}
       className="grid gap-3 md:grid-cols-2"
     >
-      {[
-        { side: "lumina" as const, identity: lumina },
-        { side: "vigila" as const, identity: vigila }
-      ].map(({ side, identity }) => {
-        const latestTurn = getLatestTurnBySide(turns, side);
-
-        return (
+      {[lumina, vigila].map((identity) => (
         <div
           key={identity.name}
           className="rounded-2xl border border-black/8 bg-white/80 px-4 py-3"
@@ -360,12 +325,8 @@ function SideIdentitySummary({
           <div className="mt-1 text-xs uppercase tracking-[0.16em] text-ink/56">
             {identity.descriptor}
           </div>
-          <p className="mt-3 text-sm leading-6 text-ink/75">
-            {latestTurn?.content ?? copy.awaitingTurn}
-          </p>
         </div>
-        );
-      })}
+      ))}
     </section>
   );
 }
@@ -435,7 +396,6 @@ export function SessionShell({
         const searchConfig = loadActiveSearchEngineRuntimeConfig();
         const payload: SessionInput = {
           question: input.question,
-          debateMode: input.debateMode,
           presetSelection: input.presetSelection,
           firstSpeaker: input.firstSpeaker,
           language: input.language,
@@ -539,22 +499,18 @@ export function SessionShell({
       });
   }, [historyMeta, session, setHistorySaveStatus]);
 
-  const questionForm = (
-    <QuestionForm
-      uiLanguage={uiLanguage}
-      onSubmit={handleSubmit}
-      questionValue={questionDraft.question}
-      onQuestionChange={questionDraft.setQuestion}
-      presetSelectionValue={workspaceState?.draftPresetSelection ?? undefined}
-      onPresetSelectionChange={workspaceState?.setDraftPresetSelection}
-      firstSpeakerValue={workspaceState?.draftFirstSpeaker ?? undefined}
-      onFirstSpeakerChange={workspaceState?.setDraftFirstSpeaker}
-      debateModeValue={workspaceState?.draftDebateMode ?? undefined}
-      onDebateModeChange={workspaceState?.setDraftDebateMode}
-    />
-  );
-  const notices = (
-    <>
+  return (
+    <div className="space-y-8">
+      <QuestionForm
+        uiLanguage={uiLanguage}
+        onSubmit={handleSubmit}
+        questionValue={questionDraft.question}
+        onQuestionChange={questionDraft.setQuestion}
+        presetSelectionValue={workspaceState?.draftPresetSelection ?? undefined}
+        onPresetSelectionChange={workspaceState?.setDraftPresetSelection}
+        firstSpeakerValue={workspaceState?.draftFirstSpeaker ?? undefined}
+        onFirstSpeakerChange={workspaceState?.setDraftFirstSpeaker}
+      />
       {errorMessage ? (
         <p className="session-alert" role="alert">
           {errorMessage}
@@ -568,9 +524,8 @@ export function SessionShell({
           {historySaveMessage}
         </p>
       ) : null}
-    </>
-  );
-  const sessionWorkspace = session ? (
+
+      {session ? (
         <section aria-label={uiCopy.debateWorkspaceLabel} className="space-y-6">
           <SectionCard
             title={uiLanguage === "en" ? "Current session" : "当前会话"}
@@ -610,41 +565,25 @@ export function SessionShell({
               </div>
             }
           >
-            <SideIdentitySummary language={uiLanguage} turns={session.turns} />
+            <SideIdentitySummary language={uiLanguage} />
           </SectionCard>
 
           {session.diagnosis ? (
             <SessionDiagnosisPanel diagnosis={session.diagnosis} copy={uiCopy} />
           ) : null}
 
+          <ResearchStatus progress={session.researchProgress} copy={uiCopy} />
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
             <DebateTimeline turns={session.turns} evidence={session.evidence} language={uiLanguage} />
             <EvidencePanel
               evidence={session.evidence}
-              privateEvidence={session.privateEvidence}
               previewItems={session.researchProgress?.previewItems}
-              onUploadEvidence={(localEvidence) =>
-                setSession((current) =>
-                  current
-                    ? {
-                        ...current,
-                        evidence: [...current.evidence, ...localEvidence]
-                      }
-                    : current
-                )
-              }
               language={uiLanguage}
             />
           </div>
           <SummaryPanel summary={session.summary} evidence={session.evidence} language={uiLanguage} />
         </section>
-  ) : null;
-
-  return (
-    <div className="space-y-8">
-      {questionForm}
-      {notices}
-      {sessionWorkspace}
+      ) : null}
     </div>
   );
 }

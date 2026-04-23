@@ -1,5 +1,4 @@
 import type { ResearchProgressStage, SessionDiagnosisStage, SessionStage, UiLanguage } from "@/lib/types";
-import type { EvidenceHolder } from "@/lib/evidence-ownership";
 
 type UiCopy = {
   appTitle: string;
@@ -57,21 +56,8 @@ type UiCopy = {
   debateTimelineTitle: string;
   debateTimelineEmptyState: string;
   turnLabel: string;
-  awaitingTurn: string;
-  turnAnalysisTitle: string;
-  factualIssuesLabel: string;
-  logicalIssuesLabel: string;
-  valueIssuesLabel: string;
-  searchFocusLabel: string;
-  noAnalysisIssues: string;
-  privateEvidenceTitle: string;
-  turnEvidenceTitle: string;
   evidenceReferenceLabel: string;
   sharedEvidenceTitle: string;
-  evidenceHolderLabels: Record<Exclude<EvidenceHolder, null>, string>;
-  uploadLocalEvidence: string;
-  localEvidenceSourceName: string;
-  localEvidenceSummaryPrefix: string;
   evidencePreviewTitle: string;
   evidencePanelEmptyState: string;
   evidencePreviewFound: string;
@@ -169,28 +155,11 @@ export const UI_COPY: Record<UiLanguage, UiCopy> = {
     debateTimelineEmptyState:
       "The opening positions and rebuttals will appear here after research finishes and the first turns are drafted.",
     turnLabel: "Turn",
-    awaitingTurn: "Awaiting turn",
-    turnAnalysisTitle: "Pre-speech analysis",
-    factualIssuesLabel: "Factual issues",
-    logicalIssuesLabel: "Logical issues",
-    valueIssuesLabel: "Value issues",
-    searchFocusLabel: "Search focus",
-    noAnalysisIssues: "None recorded",
-    privateEvidenceTitle: "Private evidence",
-    turnEvidenceTitle: "Used evidence",
     evidenceReferenceLabel: "Evidence",
-    sharedEvidenceTitle: "Evidence pool",
-    evidenceHolderLabels: {
-      lumina: "Lumina holds",
-      vigila: "Vigila holds",
-      both: "Jointly held"
-    },
-    uploadLocalEvidence: "Upload local evidence",
-    localEvidenceSourceName: "Local upload",
-    localEvidenceSummaryPrefix: "Local evidence file",
+    sharedEvidenceTitle: "Shared evidence",
     evidencePreviewTitle: "Evidence preview",
     evidencePanelEmptyState:
-      "Evidence will collect here as research discovers sources for both sides.",
+      "Shared evidence will collect here as research discovers sources for both sides.",
     evidencePreviewFound: "Found",
     evidencePreviewRead: "Read",
     evidencePreviewUsed: "Used",
@@ -284,27 +253,10 @@ export const UI_COPY: Record<UiLanguage, UiCopy> = {
     debateTimelineEmptyState:
       "当研究结束并完成首轮发言后，开场立场和反驳将显示在这里。",
     turnLabel: "回合",
-    awaitingTurn: "等待发言",
-    turnAnalysisTitle: "发言前分析",
-    factualIssuesLabel: "事实问题",
-    logicalIssuesLabel: "逻辑问题",
-    valueIssuesLabel: "价值问题",
-    searchFocusLabel: "检索焦点",
-    noAnalysisIssues: "未记录",
-    privateEvidenceTitle: "私有证据",
-    turnEvidenceTitle: "使用的证据",
     evidenceReferenceLabel: "证据",
-    sharedEvidenceTitle: "证据池",
-    evidenceHolderLabels: {
-      lumina: "乾明持有",
-      vigila: "坤察持有",
-      both: "共同持有"
-    },
-    uploadLocalEvidence: "上传本地证据",
-    localEvidenceSourceName: "本地上传",
-    localEvidenceSummaryPrefix: "本地上传文件",
+    sharedEvidenceTitle: "共享证据",
     evidencePreviewTitle: "证据预览",
-    evidencePanelEmptyState: "随着研究发现双方来源，证据会汇集在这里。",
+    evidencePanelEmptyState: "随着研究发现双方来源，共享证据会汇集在这里。",
     evidencePreviewFound: "发现",
     evidencePreviewRead: "已阅读",
     evidencePreviewUsed: "已使用",

@@ -13,7 +13,6 @@ import { loadActiveSearchEngineDisplay } from "@/lib/search-engine-preferences";
 import { getLocalizedSideIdentityCopy } from "@/lib/side-identities";
 import { getUiCopy } from "@/lib/ui-copy";
 import type {
-  DebateMode,
   SpeakerSideKey,
   TemperamentOption,
   TemperamentPairId,
@@ -33,9 +32,7 @@ function QuestionFormImpl({
   presetSelectionValue,
   onPresetSelectionChange,
   firstSpeakerValue,
-  onFirstSpeakerChange,
-  debateModeValue,
-  onDebateModeChange
+  onFirstSpeakerChange
 }: {
   onSubmit(input: SessionInput): Promise<void>;
   uiLanguage?: UiLanguage;
@@ -45,8 +42,6 @@ function QuestionFormImpl({
   onPresetSelectionChange?: (presetSelection: SessionInput["presetSelection"]) => void;
   firstSpeakerValue?: SpeakerSideKey;
   onFirstSpeakerChange?: (firstSpeaker: SpeakerSideKey) => void;
-  debateModeValue?: DebateMode;
-  onDebateModeChange?: (debateMode: DebateMode) => void;
 }) {
   const [localQuestion, setLocalQuestion] = useState("");
   const [localTemperamentPairId, setLocalTemperamentPairId] = useState<TemperamentPairId>(
@@ -56,7 +51,6 @@ function QuestionFormImpl({
     presetLibrary.TEMPERAMENT_PAIRS[0]?.options[0] ?? "cautious"
   );
   const [localFirstSpeaker, setLocalFirstSpeaker] = useState<SpeakerSideKey>("lumina");
-  const [localDebateMode, setLocalDebateMode] = useState<DebateMode>("shared-evidence");
   const [selectedModelLabel, setSelectedModelLabel] = useState<string | null>(null);
   const [isSelectedModelConfigured, setIsSelectedModelConfigured] = useState(false);
   const [selectedSearchEngineLabel, setSelectedSearchEngineLabel] = useState<string | null>(null);
@@ -76,7 +70,6 @@ function QuestionFormImpl({
   const temperamentPairId = presetSelection.pairId;
   const luminaTemperament = presetSelection.luminaTemperament as TemperamentOption;
   const firstSpeaker = firstSpeakerValue ?? localFirstSpeaker;
-  const debateMode = debateModeValue ?? localDebateMode;
   const setPresetSelection = (nextPresetSelection: SessionInput["presetSelection"]) => {
     if (onPresetSelectionChange) {
       onPresetSelectionChange(nextPresetSelection);
@@ -94,14 +87,6 @@ function QuestionFormImpl({
 
     setLocalFirstSpeaker(nextFirstSpeaker);
   };
-  const setDebateMode = (nextDebateMode: DebateMode) => {
-    if (onDebateModeChange) {
-      onDebateModeChange(nextDebateMode);
-      return;
-    }
-
-    setLocalDebateMode(nextDebateMode);
-  };
   const selectedPair =
     presetLibrary.getTemperamentPairById(temperamentPairId) ?? presetLibrary.TEMPERAMENT_PAIRS[0];
   const selectedLuminaLabel = presetLibrary.getLocalizedTemperamentOptionLabel(
@@ -115,9 +100,8 @@ function QuestionFormImpl({
   );
   const luminaIdentity = getLocalizedSideIdentityCopy("lumina", uiLanguage);
   const vigilaIdentity = getLocalizedSideIdentityCopy("vigila", uiLanguage);
-  const minimumQuestionLength = uiLanguage === "en" ? 10 : 5;
   const tooShortQuestionMessage =
-    uiLanguage === "en" ? "Question must be at least 10 characters." : "问题至少需要 5 个字符。";
+    uiLanguage === "en" ? "Question must be at least 10 characters." : "问题至少需要 10 个字符。";
   const sectionCopy =
     uiLanguage === "en"
       ? {
@@ -131,9 +115,6 @@ function QuestionFormImpl({
           currentModelLabel: "Current model",
           currentSearchEngineLabel: "Current search engine",
           unconfiguredLabel: "Not configured",
-          debateModeLabel: "Debate mode",
-          sharedEvidenceMode: "Shared evidence debate",
-          privateEvidenceMode: "Private evidence three-round debate",
           styleLabel: "Style"
         }
       : {
@@ -147,9 +128,6 @@ function QuestionFormImpl({
           currentModelLabel: "当前模型",
           currentSearchEngineLabel: "当前搜索引擎",
           unconfiguredLabel: "未配置",
-          debateModeLabel: "辩论模式",
-          sharedEvidenceMode: "共证衡辩",
-          privateEvidenceMode: "隔证三辩",
           styleLabel: "风格"
         };
 
@@ -195,57 +173,38 @@ function QuestionFormImpl({
   const searchEngineSummary = isSelectedSearchEngineConfigured && selectedSearchEngineLabel
     ? selectedSearchEngineLabel
     : sectionCopy.unconfiguredLabel;
-  const debateModeLabel =
-    debateMode === "private-evidence"
-      ? sectionCopy.privateEvidenceMode
-      : sectionCopy.sharedEvidenceMode;
-  const nextDebateMode = debateMode === "shared-evidence" ? "private-evidence" : "shared-evidence";
-  const runtimeCardClass =
-    "w-fit min-w-[128px] max-w-[220px] rounded-[16px] border border-app-line bg-app-soft px-3 py-2 text-left transition hover:border-app-strong/20 hover:bg-app-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-focus/15";
   const runtimeControls = (
     <div
       data-testid="debate-action-row"
-      className="flex flex-wrap items-start justify-end gap-3 lg:justify-end"
+      className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-end"
     >
-      <Link
-        href="/providers"
-        aria-label={`${sectionCopy.currentModelLabel}: ${modelSummary}`}
-        className={runtimeCardClass}
-      >
-        <p className="text-[11px] uppercase tracking-[0.16em] text-app-muted">
-          {sectionCopy.currentModelLabel}
-        </p>
-        <p className="mt-1 break-words text-sm font-medium text-app-strong">
-          {modelSummary}
-        </p>
-      </Link>
-      <Link
-        href="/search-engines"
-        aria-label={`${sectionCopy.currentSearchEngineLabel}: ${searchEngineSummary}`}
-        className={runtimeCardClass}
-      >
-        <p className="text-[11px] uppercase tracking-[0.16em] text-app-muted">
-          {sectionCopy.currentSearchEngineLabel}
-        </p>
-        <p className="mt-1 break-words text-sm font-medium text-app-strong">
-          {searchEngineSummary}
-        </p>
-      </Link>
-      <button
-        type="button"
-        data-testid="debate-mode-switch"
-        className={`${runtimeCardClass} bg-app-card`}
-        aria-label={`${sectionCopy.debateModeLabel}: ${debateModeLabel}`}
-        onClick={() => setDebateMode(nextDebateMode)}
-      >
-        <p className="text-[11px] uppercase tracking-[0.16em] text-app-muted">
-          {sectionCopy.debateModeLabel}
-        </p>
-        <p className="mt-1 break-words text-sm font-medium text-app-strong">
-          {debateModeLabel}
-        </p>
-      </button>
-      <div className="flex justify-end lg:shrink-0">
+      <div className="grid gap-3 sm:grid-cols-2 lg:w-[460px]">
+        <Link
+          href="/providers"
+          aria-label={`${sectionCopy.currentModelLabel}: ${modelSummary}`}
+          className="rounded-[18px] border border-black/8 bg-black/[0.03] px-4 py-2.5 transition hover:border-black/16 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10"
+        >
+          <p className="text-[11px] uppercase tracking-[0.16em] text-app-muted">
+            {sectionCopy.currentModelLabel}
+          </p>
+          <p className="mt-1 text-sm font-medium text-app-strong">
+            {modelSummary}
+          </p>
+        </Link>
+        <Link
+          href="/search-engines"
+          aria-label={`${sectionCopy.currentSearchEngineLabel}: ${searchEngineSummary}`}
+          className="rounded-[18px] border border-black/8 bg-black/[0.03] px-4 py-2.5 transition hover:border-black/16 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10"
+        >
+          <p className="text-[11px] uppercase tracking-[0.16em] text-app-muted">
+            {sectionCopy.currentSearchEngineLabel}
+          </p>
+          <p className="mt-1 text-sm font-medium text-app-strong">
+            {searchEngineSummary}
+          </p>
+        </Link>
+      </div>
+      <div className="flex justify-start lg:shrink-0 lg:justify-end">
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? uiCopy.startingDebate : uiCopy.startDebate}
         </Button>
@@ -261,7 +220,7 @@ function QuestionFormImpl({
         setQuestionError(false);
         const formData = new FormData(event.currentTarget);
         const trimmedQuestion = readTrimmedField(formData, "question");
-        if (trimmedQuestion.length < minimumQuestionLength) {
+        if (trimmedQuestion.length < 10) {
           setQuestionError(true);
           return;
         }
@@ -270,7 +229,6 @@ function QuestionFormImpl({
         try {
           const input: SessionInput = {
             question: trimmedQuestion,
-            debateMode,
             presetSelection: {
               pairId: temperamentPairId,
               luminaTemperament
@@ -306,7 +264,7 @@ function QuestionFormImpl({
             rows={4}
           />
           {questionError ? (
-            <p className="text-sm text-app-strong" role="alert">
+            <p className="text-sm text-black" role="alert">
               {tooShortQuestionMessage}
             </p>
           ) : null}
@@ -339,7 +297,7 @@ function QuestionFormImpl({
           data-testid="role-config-grid"
           className="grid w-full max-w-none gap-3 xl:grid-cols-[minmax(0,1fr)_64px_minmax(0,1fr)] xl:items-center"
         >
-          <section className="rounded-[20px] border border-app-strong bg-app-card px-4 py-3 shadow-app-soft">
+          <section className="rounded-[20px] border border-black bg-white px-4 py-3 shadow-[0_8px_18px_rgba(0,0,0,0.022)]">
             <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-2">
               <div className="min-w-0">
                 <div className="text-base font-semibold text-app-strong">{luminaIdentity.name}</div>
@@ -349,12 +307,12 @@ function QuestionFormImpl({
               </div>
               <button
                 type="button"
-                className="rounded-[8px] border border-app-strong bg-app-card px-3 py-1 text-xs font-medium text-app-strong transition hover:bg-app-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-focus"
+                className="rounded-full border border-black bg-white px-3 py-1 text-xs font-medium text-black transition hover:bg-black/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10"
                 onClick={toggleSpeakingOrder}
               >
                 {getOrderLabel("lumina")}
               </button>
-              <div className="inline-flex rounded-[8px] border border-app-strong bg-app-card px-3 py-1 text-xs font-medium text-app-strong">
+              <div className="inline-flex rounded-full border border-black bg-white px-3 py-1 text-xs font-medium text-black">
                 {selectedLuminaLabel}
               </div>
             </div>
@@ -366,18 +324,18 @@ function QuestionFormImpl({
               aria-label={uiCopy.swapTemperamentAssignment}
               aria-pressed={isSwapActive}
               className={[
-                "flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[8px] border p-0 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-focus disabled:cursor-not-allowed disabled:opacity-50",
+                "flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border p-0 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 disabled:cursor-not-allowed disabled:opacity-50",
                 isSwapActive
-                  ? "border-app-strong bg-app-strong text-app-inverse"
-                  : "border-app-line bg-app-card text-app-strong"
+                  ? "border-black bg-black text-white"
+                  : "border-black/12 bg-white text-black"
               ].join(" ")}
               onClick={handleSwapTemperament}
             >
               <span
                 data-testid="temperament-swap-icon"
                 className={[
-                  "flex h-full w-full items-center justify-center rounded-[8px] text-sm font-semibold lowercase tracking-[0.06em]",
-                  isSwapActive ? "text-app-inverse" : "text-app-strong"
+                  "flex h-full w-full items-center justify-center rounded-full text-sm font-semibold lowercase tracking-[0.06em]",
+                  isSwapActive ? "text-white" : "text-black"
                 ].join(" ")}
               >
                 {uiCopy.swapButtonText}
@@ -385,22 +343,22 @@ function QuestionFormImpl({
             </button>
           </div>
 
-          <section className="rounded-[20px] border border-app-strong bg-app-strong px-4 py-3 shadow-[0_8px_20px_var(--shadow-strong)]">
+          <section className="rounded-[20px] border border-black bg-black px-4 py-3 shadow-[0_8px_20px_rgba(0,0,0,0.06)]">
             <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-2">
               <div className="min-w-0">
-                <div className="text-base font-semibold text-app-inverse">{vigilaIdentity.name}</div>
-                <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-app-inverse/60">
+                <div className="text-base font-semibold text-white">{vigilaIdentity.name}</div>
+                <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-white/60">
                   {vigilaIdentity.descriptor}
                 </div>
               </div>
               <button
                 type="button"
-                className="rounded-[8px] border border-app-inverse/28 bg-app-strong px-3 py-1 text-xs font-medium text-app-inverse transition hover:bg-app-inverse/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-inverse/20"
+                className="rounded-full border border-white/28 bg-black px-3 py-1 text-xs font-medium text-white transition hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                 onClick={toggleSpeakingOrder}
               >
                 {getOrderLabel("vigila")}
               </button>
-              <div className="inline-flex rounded-[8px] border border-app-inverse bg-transparent px-3 py-1 text-xs font-medium text-app-inverse">
+              <div className="inline-flex rounded-full border border-white bg-transparent px-3 py-1 text-xs font-medium text-white">
                 {selectedVigilaLabel}
               </div>
             </div>

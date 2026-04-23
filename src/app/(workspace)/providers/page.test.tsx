@@ -33,22 +33,12 @@ describe("ProvidersPage", () => {
     expect(providerList.querySelector("[data-tone]")).not.toBeInTheDocument();
 
     const deepSeekCard = screen.getByRole("radio", { name: "DeepSeek" });
-    const doubaoCard = screen.getByRole("radio", { name: "豆包" });
     const openAiCard = screen.getByRole("radio", { name: "OpenAI" });
-    const providerLabels = within(providerList)
-      .getAllByRole("radio")
-      .map((card) =>
-        ["DeepSeek", "豆包", "OpenAI", "Gemini"].find((name) =>
-          within(card).queryByText(name)
-        )
-      );
 
-    expect(providerLabels.slice(0, 4)).toEqual(["DeepSeek", "豆包", "OpenAI", "Gemini"]);
     expect(deepSeekCard).toHaveAttribute("aria-checked", "true");
-    expect(doubaoCard).toHaveAttribute("aria-checked", "false");
     expect(openAiCard).toHaveAttribute("aria-checked", "false");
     expect(deepSeekCard).toHaveAttribute("tabindex", "0");
-    expect(doubaoCard).toHaveAttribute("tabindex", "-1");
+    expect(openAiCard).toHaveAttribute("tabindex", "-1");
     expect(screen.getByRole("link", { name: "获取 API" })).toHaveAttribute(
       "href",
       "https://platform.deepseek.com/api_keys"
@@ -61,22 +51,22 @@ describe("ProvidersPage", () => {
     deepSeekCard.focus();
     await user.keyboard("{ArrowDown}");
 
-    expect(doubaoCard).toHaveFocus();
-    expect(doubaoCard).toHaveAttribute("aria-checked", "true");
+    expect(openAiCard).toHaveFocus();
+    expect(openAiCard).toHaveAttribute("aria-checked", "true");
     expect(deepSeekCard).toHaveAttribute("aria-checked", "false");
-    expect(doubaoCard).toHaveAttribute("tabindex", "0");
+    expect(openAiCard).toHaveAttribute("tabindex", "0");
     expect(deepSeekCard).toHaveAttribute("tabindex", "-1");
 
-    expect(screen.getByRole("heading", { level: 2, name: "豆包" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "OpenAI" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "获取 API" })).toHaveAttribute(
       "href",
-      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey"
+      "https://platform.openai.com/api-keys"
     );
     expect(screen.getByRole("link", { name: "查看教程" })).toHaveAttribute(
       "href",
-      "https://www.volcengine.com/docs/82379/2121998"
+      "https://platform.openai.com/docs/quickstart"
     );
-    expect(screen.getByLabelText("API Endpoint")).toHaveValue("https://ark.cn-beijing.volces.com/api/v3");
+    expect(screen.getByLabelText("API Endpoint")).toHaveValue("https://api.openai.com/v1");
     expect(screen.getByLabelText("模型 ID")).toHaveValue("");
     expect(screen.getByLabelText("API Key")).toBeInTheDocument();
   });

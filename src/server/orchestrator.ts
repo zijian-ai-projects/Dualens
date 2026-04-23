@@ -38,19 +38,16 @@ export function createOrchestrator(store: SessionStore, deps: OrchestratorDeps) 
         premise?: string;
         config?: Partial<SessionRecord["config"]>;
       };
-      const config = { ...DEFAULT_SESSION_CONFIG, ...parsed.config } as SessionRecord["config"];
       const session: SessionRecord = {
         id: randomUUID(),
-        debateMode: config.debateMode,
         question: parsed.question,
         presetSelection: parsed.presetSelection,
         firstSpeaker: parsed.firstSpeaker ?? "lumina",
         language: parsed.language,
         premise: parsed.premise,
         stage: "research",
-        config,
+        config: { ...DEFAULT_SESSION_CONFIG, ...parsed.config } as SessionRecord["config"],
         evidence: [],
-        privateEvidence: {},
         turns: []
       };
 
