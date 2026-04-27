@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  clearHistoryFolder,
   chooseHistoryFolder,
   formatHistoryFolderState,
   loadHistoryFolderState,
@@ -12,6 +13,7 @@ type DirectoryPickerWindow = Window &
   };
 
 const indexedDbDescriptor = Object.getOwnPropertyDescriptor(window, "indexedDB");
+const isSecureContextDescriptor = Object.getOwnPropertyDescriptor(window, "isSecureContext");
 
 function mockIndexedDbOpenFailure() {
   const error = new DOMException("blocked");
@@ -38,6 +40,60 @@ function mockIndexedDbOpenFailure() {
   });
 }
 
+function mockIndexedDbDeleteSuccess() {
+  const deleteRequest = {
+    onerror: null,
+    onsuccess: null,
+    error: null
+  } as unknown as IDBRequest;
+  const deleteMock = vi.fn().mockImplementation(() => {
+    queueMicrotask(() => {
+      deleteRequest.onsuccess?.(new Event("success"));
+    });
+
+    return deleteRequest;
+  });
+  const closeMock = vi.fn();
+  const db = {
+    objectStoreNames: {
+      contains: vi.fn(() => true)
+    },
+    transaction: vi.fn(() => ({
+      objectStore: vi.fn(() => ({
+        delete: deleteMock
+      }))
+    })),
+    close: closeMock
+  };
+  const openRequest = {
+    onerror: null,
+    onsuccess: null,
+    onupgradeneeded: null,
+    result: db,
+    error: null
+  } as unknown as IDBOpenDBRequest;
+  const openMock = vi.fn().mockImplementation(() => {
+    queueMicrotask(() => {
+      openRequest.onsuccess?.(new Event("success"));
+    });
+
+    return openRequest;
+  });
+
+  Object.defineProperty(window, "indexedDB", {
+    configurable: true,
+    value: {
+      open: openMock
+    }
+  });
+
+  return {
+    closeMock,
+    deleteMock,
+    openMock
+  };
+}
+
 describe("history-folder store helpers", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -47,6 +103,12 @@ describe("history-folder store helpers", () => {
       Object.defineProperty(window, "indexedDB", indexedDbDescriptor);
     } else {
       delete (window as Window & typeof globalThis & { indexedDB?: IDBFactory }).indexedDB;
+    }
+
+    if (isSecureContextDescriptor) {
+      Object.defineProperty(window, "isSecureContext", isSecureContextDescriptor);
+    } else {
+      delete (window as Window & typeof globalThis & { isSecureContext?: boolean }).isSecureContext;
     }
   });
 
@@ -60,6 +122,19 @@ describe("history-folder store helpers", () => {
 
   it("maps missing directory support to the unsupported UI state", () => {
     expect(formatHistoryFolderState({ supported: false })).toEqual({
+      status: "unsupported",
+      folderName: null
+    });
+  });
+
+  it("treats insecure contexts as unsupported for directory access", async () => {
+    Object.defineProperty(window, "isSecureContext", {
+      configurable: true,
+      value: false
+    });
+    (window as DirectoryPickerWindow).showDirectoryPicker = vi.fn();
+
+    await expect(loadHistoryFolderState()).resolves.toEqual({
       status: "unsupported",
       folderName: null
     });
@@ -107,5 +182,18 @@ describe("history-folder store helpers", () => {
       status: "needs-permission",
       folderName: null
     });
+  });
+
+  it("clears the saved folder handle from indexedDB", async () => {
+    (window as DirectoryPickerWindow).showDirectoryPicker = vi.fn();
+    const indexedDb = mockIndexedDbDeleteSuccess();
+
+    await expect(clearHistoryFolder()).resolves.toEqual({
+      status: "unselected",
+      folderName: null
+    });
+    expect(indexedDb.openMock).toHaveBeenCalledWith("dualens-history", 1);
+    expect(indexedDb.deleteMock).toHaveBeenCalledWith("history-folder-handle");
+    expect(indexedDb.closeMock).toHaveBeenCalledTimes(1);
   });
 });

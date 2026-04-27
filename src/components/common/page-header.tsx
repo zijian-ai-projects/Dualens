@@ -10,7 +10,7 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <header className="flex flex-col gap-4 border-b border-black/8 pb-6 lg:flex-row lg:items-end lg:justify-between">
+    <header className="relative z-10 flex flex-col gap-4 border-b border-app-line pb-6 lg:flex-row lg:items-end lg:justify-between">
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-[-0.05em] text-app-strong lg:text-[2.5rem]">
           {title}

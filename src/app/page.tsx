@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { ProductEntryPage } from "@/components/product-entry-page";
 
 export default function HomePage() {
-  redirect("/debate");
+  return <ProductEntryPage />;
 }

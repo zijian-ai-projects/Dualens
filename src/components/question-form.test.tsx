@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
+import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -103,9 +104,9 @@ describe("QuestionForm", () => {
 
     expect(within(luminaCard).getByText("谨慎")).toBeInTheDocument();
     expect(within(vigilaCard).getByText("激进")).toBeInTheDocument();
-    expect(luminaOrderChip).toHaveClass("rounded-full");
-    expect(luminaOrderChip).toHaveClass("border-black");
-    expect(vigilaOrderChip).toHaveClass("text-white");
+    expect(luminaOrderChip).toHaveClass("rounded-[8px]");
+    expect(luminaOrderChip).toHaveClass("border-app-strong");
+    expect(vigilaOrderChip).toHaveClass("text-app-inverse");
   });
 
   it("toggles the center swap button color without hover-driven inversion", () => {
@@ -116,23 +117,24 @@ describe("QuestionForm", () => {
     });
     const swapTemperamentLabel = screen.getByTestId("temperament-swap-icon");
 
-    expect(swapTemperamentButton).toHaveClass("bg-white");
-    expect(swapTemperamentButton).toHaveClass("text-black");
-    expect(swapTemperamentButton).not.toHaveClass("hover:bg-black");
-    expect(swapTemperamentButton).not.toHaveClass("hover:text-white");
-    expect(swapTemperamentLabel).toHaveClass("text-black");
+    expect(swapTemperamentButton).toHaveClass("rounded-[8px]");
+    expect(swapTemperamentButton).toHaveClass("bg-app-card");
+    expect(swapTemperamentButton).toHaveClass("text-app-strong");
+    expect(swapTemperamentButton).not.toHaveClass("hover:bg-app-strong");
+    expect(swapTemperamentButton).not.toHaveClass("hover:text-app-inverse");
+    expect(swapTemperamentLabel).toHaveClass("text-app-strong");
 
     fireEvent.click(swapTemperamentButton);
 
-    expect(swapTemperamentButton).toHaveClass("bg-black");
-    expect(swapTemperamentButton).toHaveClass("text-white");
-    expect(swapTemperamentLabel).toHaveClass("text-white");
+    expect(swapTemperamentButton).toHaveClass("bg-app-strong");
+    expect(swapTemperamentButton).toHaveClass("text-app-inverse");
+    expect(swapTemperamentLabel).toHaveClass("text-app-inverse");
 
     fireEvent.click(swapTemperamentButton);
 
-    expect(swapTemperamentButton).toHaveClass("bg-white");
-    expect(swapTemperamentButton).toHaveClass("text-black");
-    expect(swapTemperamentLabel).toHaveClass("text-black");
+    expect(swapTemperamentButton).toHaveClass("bg-app-card");
+    expect(swapTemperamentButton).toHaveClass("text-app-strong");
+    expect(swapTemperamentLabel).toHaveClass("text-app-strong");
   });
 
   it("keeps role cards wide and anchors runtime controls to the top of the action card", () => {
@@ -163,5 +165,79 @@ describe("QuestionForm", () => {
 
     expect(html).not.toContain("Tavily");
     expect(html).toContain("未配置");
+  });
+
+  it("shows the current debate mode and submits the selected mode", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(async () => undefined);
+
+    render(<QuestionForm onSubmit={onSubmit} uiLanguage="zh-CN" />);
+
+    const actionRow = screen.getByTestId("debate-action-row");
+    const modelSummary = within(actionRow).getByRole("link", { name: /当前模型/ });
+    const searchEngineSummary = within(actionRow).getByRole("link", { name: /当前搜索引擎/ });
+    const modeSwitch = within(actionRow).getByRole("button", {
+      name: /辩论模式.*共证衡辩/
+    });
+
+    expect(modelSummary).toHaveClass("min-w-[128px]");
+    expect(modelSummary).toHaveClass("rounded-[16px]");
+    expect(modelSummary).toHaveClass("text-left");
+    expect(searchEngineSummary).toHaveClass("min-w-[128px]");
+    expect(searchEngineSummary).toHaveClass("rounded-[16px]");
+    expect(searchEngineSummary).toHaveClass("text-left");
+    expect(modeSwitch).toHaveClass("min-w-[128px]");
+    expect(modeSwitch).toHaveClass("rounded-[16px]");
+    expect(modeSwitch).toHaveClass("text-left");
+    expect(modeSwitch).not.toHaveClass("absolute");
+
+    await user.click(modeSwitch);
+    expect(within(actionRow).getByRole("button", { name: /隔证三辩/ })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("决策问题"), "我应该为了工作搬到另一个城市吗？");
+    await user.click(screen.getByRole("button", { name: "开始辩论" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        debateMode: "private-evidence"
+      })
+    );
+  });
+
+  it("uses a five-character minimum for Chinese decision questions", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(async () => undefined);
+
+    render(<QuestionForm onSubmit={onSubmit} uiLanguage="zh-CN" />);
+
+    await user.type(screen.getByLabelText("决策问题"), "换工作吗");
+    await user.click(screen.getByRole("button", { name: "开始辩论" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("问题至少需要 5 个字符。");
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await user.clear(screen.getByLabelText("决策问题"));
+    await user.type(screen.getByLabelText("决策问题"), "要换工作吗");
+    await user.click(screen.getByRole("button", { name: "开始辩论" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        question: "要换工作吗",
+        language: "zh-CN"
+      })
+    );
+  });
+
+  it("keeps a ten-character minimum for English decision questions", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(async () => undefined);
+
+    render(<QuestionForm onSubmit={onSubmit} uiLanguage="en" />);
+
+    await user.type(screen.getByLabelText("Decision question"), "Move now?");
+    await user.click(screen.getByRole("button", { name: "Start debate" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Question must be at least 10 characters.");
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });

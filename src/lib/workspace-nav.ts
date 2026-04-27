@@ -1,12 +1,12 @@
 export type WorkspaceNavItem = {
-  href: "/debate" | "/history" | "/providers" | "/search-engines" | "/settings";
+  href: "/app" | "/history" | "/providers" | "/search-engines" | "/settings";
   label: string;
   description: string;
 };
 
 export const workspaceNavItems: WorkspaceNavItem[] = [
   {
-    href: "/debate",
+    href: "/app",
     label: "辩论",
     description: "配置问题、角色与模型"
   },

@@ -52,13 +52,14 @@ describe("workspace navigation copy", () => {
       .filter(Boolean);
 
     expect(labels).toEqual(["辩论", "辩论历史", "AI 服务商", "搜索引擎", "通用设置"]);
-    expect(within(nav).getByRole("link", { name: "辩论" })).toHaveAttribute("href", "/debate");
+    expect(within(nav).getByRole("link", { name: "辩论" })).toHaveAttribute("href", "/app");
     expect(within(nav).getByRole("link", { name: "辩论历史" })).toHaveAttribute("href", "/history");
     expect(within(nav).getByRole("link", { name: "AI 服务商" })).toHaveAttribute("href", "/providers");
     expect(within(nav).getByRole("link", { name: "搜索引擎" })).toHaveAttribute("href", "/search-engines");
     expect(within(nav).getByRole("link", { name: "通用设置" })).toHaveAttribute("href", "/settings");
     expect(within(nav).getByRole("link", { name: "搜索引擎" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByText("一个问题，正反两面，证据可见")).toBeInTheDocument();
+    expect(screen.queryByText("Workspace")).not.toBeInTheDocument();
   });
 
   it("uses the stored English global language", async () => {
@@ -83,8 +84,7 @@ describe("workspace navigation copy", () => {
     const brandLink = taijiMark?.closest("a");
 
     expect(taijiMark).toHaveClass("animate-taiji-counterclockwise");
-    expect(brandLink).not.toHaveClass("border");
-    expect(brandLink).not.toHaveClass("bg-white");
+    expect(brandLink).toHaveAttribute("href", "/");
     expect(brandLink?.firstElementChild).toHaveClass("justify-center");
   });
 });

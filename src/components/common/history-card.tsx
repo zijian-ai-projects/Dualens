@@ -14,6 +14,8 @@ type HistoryCardCopy = {
   running: string;
   failed: string;
   modelPrefix: string;
+  searchEnginePrefix: string;
+  debateModePrefix: string;
   rolePrefix: string;
   viewDetails: string;
   rerun: string;
@@ -24,6 +26,8 @@ export function HistoryCard({
   question,
   createdAt,
   model,
+  searchEngine,
+  debateMode,
   roleSummary,
   status,
   copy,
@@ -34,6 +38,8 @@ export function HistoryCard({
   question: string;
   createdAt: string;
   model: string;
+  searchEngine: string;
+  debateMode: string;
   roleSummary: string;
   status: HistoryStatus;
   copy?: HistoryCardCopy;
@@ -46,7 +52,9 @@ export function HistoryCard({
     running: "进行中",
     failed: "失败",
     modelPrefix: "模型",
-    rolePrefix: "角色设定",
+    searchEnginePrefix: "搜索引擎",
+    debateModePrefix: "辩论模式",
+    rolePrefix: "风格对",
     viewDetails: "查看详情",
     rerun: "重新发起同题辩论",
     delete: "删除"
@@ -69,6 +77,8 @@ export function HistoryCard({
           <h2 className="text-xl font-semibold tracking-[-0.03em] text-app-strong">{question}</h2>
           <div className="grid gap-2 text-sm text-app-muted lg:grid-cols-2">
             <p>{cardCopy.modelPrefix}：{model}</p>
+            <p>{cardCopy.searchEnginePrefix}：{searchEngine}</p>
+            <p>{cardCopy.debateModePrefix}：{debateMode}</p>
             <p>{cardCopy.rolePrefix}：{roleSummary}</p>
           </div>
         </div>

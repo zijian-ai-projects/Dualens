@@ -34,6 +34,15 @@ export const MODEL_PROVIDER_OPTIONS = [
     tutorialUrl: "https://api-docs.deepseek.com/"
   },
   {
+    id: "doubao",
+    name: "豆包",
+    icon: "豆",
+    defaultModelId: "",
+    defaultEndpoint: "https://ark.cn-beijing.volces.com/api/v3",
+    apiUrl: "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
+    tutorialUrl: "https://www.volcengine.com/docs/82379/2121998"
+  },
+  {
     id: "openai",
     name: "OpenAI",
     icon: "O",
@@ -50,15 +59,6 @@ export const MODEL_PROVIDER_OPTIONS = [
     defaultEndpoint: "https://generativelanguage.googleapis.com",
     apiUrl: "https://aistudio.google.com/apikey",
     tutorialUrl: "https://ai.google.dev/gemini-api/docs/quickstart"
-  },
-  {
-    id: "doubao",
-    name: "豆包",
-    icon: "豆",
-    defaultModelId: "",
-    defaultEndpoint: "https://ark.cn-beijing.volces.com/api/v3",
-    apiUrl: "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
-    tutorialUrl: "https://www.volcengine.com/docs/82379/2121998"
   }
 ] as const satisfies readonly ModelProviderOption[];
 

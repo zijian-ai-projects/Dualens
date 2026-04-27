@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
@@ -41,8 +41,10 @@ function createDeferred<T>() {
 function buildSession(overrides: Partial<SessionView> & Pick<SessionView, "id" | "stage">): SessionView {
   return {
     id: overrides.id,
+    debateMode: overrides.debateMode ?? "shared-evidence",
     stage: overrides.stage,
     evidence: overrides.evidence ?? [],
+    privateEvidence: overrides.privateEvidence ?? {},
     turns: overrides.turns ?? [],
     summary: overrides.summary,
     researchProgress: overrides.researchProgress,
@@ -117,6 +119,7 @@ describe("SessionShell", () => {
 
     expect(createSession).toHaveBeenCalledWith({
       question: "Should I move to another city?",
+      debateMode: "shared-evidence",
       presetSelection: {
         pairId: "cautious-aggressive",
         luminaTemperament: "cautious"
@@ -151,7 +154,59 @@ describe("SessionShell", () => {
 
     expect(createSession).toHaveBeenCalledWith(
       expect.objectContaining({
+        debateMode: "shared-evidence",
         firstSpeaker: "vigila"
+      })
+    );
+  });
+
+  it("submits and preserves the selected debate mode across workspace page switches", async () => {
+    const user = setupUser();
+    const createSession = vi.fn().mockResolvedValue(
+      buildSession({
+        id: "s-mode",
+        debateMode: "private-evidence",
+        stage: "research"
+      })
+    );
+
+    function Harness() {
+      const [route, setRoute] = useState<"debate" | "other">("debate");
+
+      return (
+        <DebateWorkspaceStateProvider>
+          {route === "debate" ? (
+            <SessionShell
+              uiLanguage="zh-CN"
+              createSession={createSession}
+              continueSession={vi.fn()}
+            />
+          ) : (
+            <button type="button" onClick={() => setRoute("debate")}>
+              回到辩论
+            </button>
+          )}
+          <button type="button" onClick={() => setRoute("other")}>
+            离开辩论
+          </button>
+        </DebateWorkspaceStateProvider>
+      );
+    }
+
+    render(<Harness />);
+
+    await user.click(screen.getByRole("button", { name: /共证衡辩/ }));
+    await user.click(screen.getByRole("button", { name: "离开辩论" }));
+    await user.click(screen.getByRole("button", { name: "回到辩论" }));
+
+    expect(screen.getByRole("button", { name: /隔证三辩/ })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("决策问题"), "我应该为了工作搬到另一个城市吗？");
+    await user.click(screen.getByRole("button", { name: "开始辩论" }));
+
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        debateMode: "private-evidence"
       })
     );
   });
@@ -415,6 +470,90 @@ describe("SessionShell", () => {
     );
   });
 
+  it("records private-evidence debates in history after completion", async () => {
+    const user = setupUser();
+    const privateEvidence = {
+      lumina: [
+        {
+          id: "private-lumina",
+          title: "Housing cost report",
+          url: "https://example.com/housing",
+          sourceName: "Example Research",
+          sourceType: "report",
+          summary: "Housing costs are rising."
+        }
+      ],
+      vigila: [
+        {
+          id: "private-vigila",
+          title: "Job growth report",
+          url: "https://example.com/jobs",
+          sourceName: "Example Jobs",
+          sourceType: "analysis",
+          summary: "Job openings are growing."
+        }
+      ]
+    };
+    const createSession = vi.fn().mockResolvedValueOnce(
+      buildSession({
+        id: "private-history",
+        debateMode: "private-evidence",
+        stage: "research",
+        privateEvidence
+      })
+    );
+    const continueSession = vi.fn().mockResolvedValueOnce(
+      buildSession({
+        id: "private-history",
+        debateMode: "private-evidence",
+        stage: "complete",
+        evidence: [...privateEvidence.lumina, ...privateEvidence.vigila],
+        privateEvidence,
+        turns: [
+          {
+            id: "t1",
+            speaker: "Lumina",
+            content: "Control housing risk first.",
+            referencedEvidenceIds: ["private-lumina"],
+            privateEvidenceIds: ["private-lumina"]
+          }
+        ],
+        summary: {
+          strongestFor: [{ text: "Job growth is clear.", evidenceIds: ["private-vigila"] }],
+          strongestAgainst: [{ text: "Housing costs are rising.", evidenceIds: ["private-lumina"] }],
+          coreDisagreement: "Whether growth offsets cost.",
+          keyUncertainty: "Actual salary offer.",
+          nextAction: "Compare offer and rent."
+        }
+      })
+    );
+
+    render(
+      <SessionShell
+        createSession={createSession}
+        continueSession={continueSession}
+        uiLanguage="zh-CN"
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /共证衡辩/ }));
+    await user.type(screen.getByLabelText("决策问题"), "我应该为了工作搬到另一个城市吗？");
+    await user.click(screen.getByRole("button", { name: "开始辩论" }));
+
+    await waitFor(() => {
+      expect(persistSessionHistory).toHaveBeenCalledTimes(2);
+    });
+
+    expect(persistSessionHistory.mock.calls[1]?.[1]).toMatchObject({
+      id: "private-history",
+      debateMode: "private-evidence",
+      privateEvidence: {
+        lumina: [expect.objectContaining({ id: "private-lumina" })],
+        vigila: [expect.objectContaining({ id: "private-vigila" })]
+      }
+    });
+  });
+
   it("captures the search-engine label before createSession resolves", async () => {
     const user = setupUser();
     const createSessionDeferred = createDeferred<SessionView>();
@@ -568,6 +707,112 @@ describe("SessionShell", () => {
     expect(screen.getByText("Current session")).toBeInTheDocument();
     expect(screen.getByLabelText("Decision question")).toHaveValue("Should I move to Hangzhou?");
     expect(screen.getAllByText("Research in progress").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("region", { name: "Research progress" })).not.toBeInTheDocument();
+  });
+
+  it("adds uploaded local evidence to the active evidence pool", async () => {
+    const user = setupUser();
+    const createSession = vi.fn().mockResolvedValueOnce(
+      buildSession({
+        id: "session-local-evidence",
+        stage: "complete"
+      })
+    );
+
+    render(
+      <SessionShell
+        createSession={createSession}
+        continueSession={vi.fn()}
+        uiLanguage="zh-CN"
+      />
+    );
+
+    await user.type(screen.getByLabelText("决策问题"), "我应该为了工作搬到另一个城市吗？");
+    await user.click(screen.getByRole("button", { name: "开始辩论" }));
+
+    await user.upload(
+      await screen.findByLabelText("上传本地证据"),
+      new File(["本地证据内容说明"], "local-note.txt", { type: "text/plain" })
+    );
+
+    expect(await screen.findByText("local-note.txt")).toBeInTheDocument();
+    expect(screen.getByText("本地")).toBeInTheDocument();
+  });
+
+  it("shows only each side's latest speech in the current session lanes", async () => {
+    const user = setupUser();
+    const createSession = vi.fn().mockResolvedValueOnce(
+      buildSession({
+        id: "session-current-lanes",
+        stage: "complete",
+        evidence: [
+          {
+            id: "e1",
+            title: "就业机会分析",
+            url: "https://example.com/jobs",
+            sourceName: "Example Jobs",
+            sourceType: "analysis",
+            summary: "新城市岗位供给更多。"
+          }
+        ],
+        turns: [
+          {
+            id: "t1",
+            speaker: "乾明",
+            content: "先评估旧观点。",
+            referencedEvidenceIds: ["e1"],
+            side: "lumina",
+            round: 1
+          },
+          {
+            id: "t2",
+            speaker: "坤察",
+            content: "岗位增长说明收益可能覆盖成本。",
+            referencedEvidenceIds: ["e1"],
+            side: "vigila",
+            round: 1,
+            analysis: {
+              factualIssues: ["需要核对岗位增长口径。"],
+              logicalIssues: ["不能直接等同净收益。"],
+              valueIssues: ["需要考虑家庭稳定。"],
+              searchFocus: "岗位增长与薪酬"
+            }
+          },
+          {
+            id: "t3",
+            speaker: "乾明",
+            content: "后续观点覆盖旧内容。",
+            referencedEvidenceIds: ["e1"],
+            side: "lumina",
+            round: 2
+          }
+        ]
+      })
+    );
+
+    render(
+      <SessionShell
+        createSession={createSession}
+        continueSession={vi.fn()}
+        uiLanguage="zh-CN"
+      />
+    );
+
+    await user.type(screen.getByLabelText("决策问题"), "我应该为了工作搬到另一个城市吗？");
+    await user.click(screen.getByRole("button", { name: "开始辩论" }));
+
+    const currentSession = (await screen.findByRole("heading", { name: "当前会话" })).closest(
+      "section"
+    );
+
+    expect(currentSession).toBeInTheDocument();
+    expect(within(currentSession as HTMLElement).getByText("后续观点覆盖旧内容。")).toBeInTheDocument();
+    expect(
+      within(currentSession as HTMLElement).getByText("岗位增长说明收益可能覆盖成本。")
+    ).toBeInTheDocument();
+    expect(within(currentSession as HTMLElement).queryByText("先评估旧观点。")).not.toBeInTheDocument();
+    expect(within(currentSession as HTMLElement).queryByText("发言前分析")).not.toBeInTheDocument();
+    expect(within(currentSession as HTMLElement).queryByText(/证据 1/)).not.toBeInTheDocument();
   });
 
   it("reminds users to choose a history folder after a completed debate is not saved", async () => {

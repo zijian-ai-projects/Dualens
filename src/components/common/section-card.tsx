@@ -18,7 +18,7 @@ export function SectionCard({
   return (
     <section
       className={[
-        "rounded-[28px] border border-app-line bg-app-card p-6 shadow-[0_10px_28px_rgba(0,0,0,0.03)]",
+        "rounded-[28px] border border-app-line bg-app-card/96 p-6 shadow-[0_16px_48px_var(--shadow-soft)] backdrop-blur",
         className ?? ""
       ]
         .filter(Boolean)

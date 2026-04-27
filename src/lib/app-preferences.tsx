@@ -46,18 +46,26 @@ type AppPreferencesValue = {
 const AppPreferencesContext = createContext<AppPreferencesValue | null>(null);
 
 export function AppPreferencesProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<UiLanguage>(DEFAULT_LANGUAGE);
+  const [language, setLanguageState] = useState<UiLanguage>(() => {
+    if (typeof window === "undefined") {
+      return DEFAULT_LANGUAGE;
+    }
+
+    return readStoredLanguage(window.localStorage);
+  });
 
   useEffect(() => {
-    setLanguageState(readStoredLanguage(window.localStorage));
-  }, []);
+    document.documentElement.lang = language === "en" ? "en" : "zh-CN";
+  }, [language]);
 
   const value = useMemo<AppPreferencesValue>(
     () => ({
       language,
       setLanguage(nextLanguage) {
         setLanguageState(nextLanguage);
-        writeStoredLanguage(window.localStorage, nextLanguage);
+        if (typeof window !== "undefined") {
+          writeStoredLanguage(window.localStorage, nextLanguage);
+        }
       }
     }),
     [language]
